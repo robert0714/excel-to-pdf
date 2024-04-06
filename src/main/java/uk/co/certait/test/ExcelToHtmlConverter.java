@@ -1,5 +1,4 @@
 package uk.co.certait.test;
-
 /* ====================================================================
 Licensed to the Apache Software Foundation (ASF) under one or more
 contributor license agreements.  See the NOTICE file distributed with
@@ -32,11 +31,13 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.poi.examples.ss.html.HtmlHelper;
+import org.apache.poi.EncryptedDocumentException;
+import org.apache.poi.examples.ss.html.HSSFHtmlHelper; 
+import org.apache.poi.examples.ss.html.XSSFHtmlHelper;
+
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
-import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
-import org.apache.poi.ss.examples.html.HSSFHtmlHelper;
-import org.apache.poi.ss.examples.html.HtmlHelper;
-import org.apache.poi.ss.examples.html.XSSFHtmlHelper;
+ 
 import org.apache.poi.ss.format.CellFormat;
 import org.apache.poi.ss.format.CellFormatResult;
 import org.apache.poi.ss.usermodel.BorderStyle;
@@ -141,7 +142,7 @@ public class ExcelToHtmlConverter {
 		try {
 			Workbook wb = WorkbookFactory.create(in);
 			return create(wb, output);
-		} catch (InvalidFormatException e) {
+		} catch (EncryptedDocumentException e) {
 			throw new IllegalArgumentException("Cannot create workbook from stream", e);
 		}
 	}
@@ -199,6 +200,7 @@ public class ExcelToHtmlConverter {
 				out.format("<?xml version=\"1.0\" encoding=\"iso-8859-1\" ?>%n");
 				out.format("<html>%n");
 				out.format("<head>%n");
+				printInlineStyle();
 				out.format("</head>%n");
 				out.format("<body>%n");
 			}
@@ -218,7 +220,9 @@ public class ExcelToHtmlConverter {
 	}
 
 	public void print() {
-		printInlineStyle();
+		if (!completeHTML) {
+			printInlineStyle();
+		}
 		printSheets();
 	}
 
@@ -278,18 +282,18 @@ public class ExcelToHtmlConverter {
 	}
 
 	private void styleContents(CellStyle style) {
-		styleOut("text-align", style.getAlignmentEnum(), HALIGN);
-		styleOut("vertical-align", style.getVerticalAlignmentEnum(), VALIGN);
+		styleOut("text-align", style.getAlignment(), HALIGN);
+		styleOut("vertical-align", style.getVerticalAlignment(), VALIGN);
 		fontStyle(style);
 		borderStyles(style);
 		helper.colorStyles(style, out);
 	}
 
 	private void borderStyles(CellStyle style) {
-		styleOut("border-left", style.getBorderLeftEnum(), BORDER);
-		styleOut("border-right", style.getBorderRightEnum(), BORDER);
-		styleOut("border-top", style.getBorderTopEnum(), BORDER);
-		styleOut("border-bottom", style.getBorderBottomEnum(), BORDER);
+		styleOut("border-left", style.getBorderLeft(), BORDER);
+		styleOut("border-right", style.getBorderRight(), BORDER);
+		styleOut("border-top", style.getBorderTop(), BORDER);
+		styleOut("border-bottom", style.getBorderBottom(), BORDER);
 	}
 
 	private void fontStyle(CellStyle style) {
@@ -335,9 +339,9 @@ public class ExcelToHtmlConverter {
 
 	@SuppressWarnings("deprecation")
 	private static CellType ultimateCellType(Cell c) {
-		CellType type = c.getCellTypeEnum();
-		if (type == CellType.FORMULA) {
-			type = c.getCachedFormulaResultTypeEnum();
+		CellType type = c.getCellType();
+		if (CellType.FORMULA == type) {
+			type = c.getCachedFormulaResultType();
 		}
 		return type;
 	}
@@ -350,7 +354,7 @@ public class ExcelToHtmlConverter {
 
 	public void printSheet(Sheet sheet) {
 		ensureOut();
-		out.format("<table class=%s>%n", DEFAULTS_CLASS);
+		out.format("<table class=%s>%n", "\""+DEFAULTS_CLASS+"\"");
 		printCols(sheet);
 		printSheetContent(sheet);
 		out.format("</table>%n");
@@ -385,8 +389,8 @@ public class ExcelToHtmlConverter {
 
 	private void printColumnHeads() {
 		out.format("<thead>%n");
-		out.format("  <tr class=%s>%n", COL_HEAD_CLASS);
-		out.format("    <th class=%s>&#x25CA;</th>%n", COL_HEAD_CLASS);
+		out.format("  <tr class=%s>%n", "\""+COL_HEAD_CLASS+"\"");
+		out.format("    <th class=%s>&#x25CA;</th>%n", "\""+COL_HEAD_CLASS+"\"");
 		// noinspection UnusedDeclaration
 		StringBuilder colName = new StringBuilder();
 		for (int i = firstColumn; i < endColumn; i++) {
@@ -396,7 +400,7 @@ public class ExcelToHtmlConverter {
 				colName.insert(0, (char) ('A' + cnum % 26));
 				cnum /= 26;
 			} while (cnum > 0);
-			out.format("    <th class=%s>%s</th>%n", COL_HEAD_CLASS, colName);
+			out.format("    <th class=%s>%s</th>%n", "\""+COL_HEAD_CLASS+"\"", colName);
 		}
 		out.format("  </tr>%n");
 		out.format("</thead>%n");
@@ -411,7 +415,7 @@ public class ExcelToHtmlConverter {
 			Row row = rows.next();
 
 			out.format("  <tr>%n");
-			out.format("    <td class=%s>%d</td>%n", ROW_HEAD_CLASS, row.getRowNum() + 1);
+			out.format("    <td class=\"%s\">%d</td>%n", ROW_HEAD_CLASS, row.getRowNum() + 1);
 			for (int i = firstColumn; i < endColumn; i++) {
 				String content = "&nbsp;";
 				String attrs = "";
@@ -431,7 +435,7 @@ public class ExcelToHtmlConverter {
 						}
 					}
 				}
-				out.format("    <td class=%s %s>%s</td>%n", styleName(style), attrs, content);
+				out.format("    <td class=\"%s\" %s>%s</td>%n", styleName(style), attrs, content);
 			}
 			out.format("  </tr>%n");
 		}
@@ -439,7 +443,7 @@ public class ExcelToHtmlConverter {
 	}
 
 	private String tagStyle(Cell cell, CellStyle style) {
-		if (style.getAlignmentEnum() == HorizontalAlignment.GENERAL) {
+		if (HorizontalAlignment.GENERAL == style.getAlignment()) {
 			switch (ultimateCellType(cell)) {
 			case STRING:
 				return "style=\"text-align: left;\"";
