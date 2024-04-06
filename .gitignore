@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+test-xls.html
+test-xls.pdf
+test-xlsx.html
+test.png
