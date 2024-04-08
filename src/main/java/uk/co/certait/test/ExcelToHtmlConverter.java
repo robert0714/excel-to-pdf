@@ -24,14 +24,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.Formatter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.poi.examples.ss.html.HtmlHelper;
+import org.apache.poi.examples.ss.html.HtmlHelper; 
 import org.apache.poi.EncryptedDocumentException;
 import org.apache.poi.examples.ss.html.HSSFHtmlHelper; 
 import org.apache.poi.examples.ss.html.XSSFHtmlHelper;
@@ -51,7 +53,9 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
-import org.apache.poi.util.IOUtils;
+import org.apache.poi.ss.util.CellAddress;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.util.IOUtils; 
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 /**
@@ -65,7 +69,7 @@ public class ExcelToHtmlConverter {
 	private Formatter out;
 	private boolean gotBounds;
 	private int firstColumn;
-	private int endColumn;
+	private int endColumn; 
 	private HtmlHelper helper;
 
 	private static final String DEFAULTS_CLASS = "excelDefaults";
@@ -218,6 +222,31 @@ public class ExcelToHtmlConverter {
 			}
 		}
 	}
+	public void printPageFromSheet(Sheet sheet) throws IOException {
+		try {
+			ensureOut();
+			if (completeHTML) {
+				out.format("<?xml version=\"1.0\" encoding=\"UTF8\" ?>%n");
+				out.format("<html>%n");
+				out.format("<head>%n");
+				printInlineStyle();
+				out.format("</head>%n");
+				out.format("<body>%n");
+			}
+
+			printSheet(sheet );
+
+			if (completeHTML) {
+				out.format("</body>%n");
+				out.format("</html>%n");
+			}
+		} finally {
+			IOUtils.closeQuietly(out);
+			if (output instanceof Closeable) {
+				IOUtils.closeQuietly((Closeable) output);
+			}
+		}
+	}
 
 	public void print() {
 		if (!completeHTML) {
@@ -352,7 +381,7 @@ public class ExcelToHtmlConverter {
 		printSheet(sheet);
 	}
 
-	public void printSheet(Sheet sheet) {
+	public void printSheet(Sheet sheet) {		 
 		ensureOut();
 		out.format("<table class=%s>%n", "\""+DEFAULTS_CLASS+"\"");
 		printCols(sheet);
@@ -364,6 +393,9 @@ public class ExcelToHtmlConverter {
 		out.format("<col/>%n");
 		ensureColumnBounds(sheet);
 		for (int i = firstColumn; i < endColumn; i++) {
+			if(sheet.isColumnHidden(i)) {
+				continue;
+			}
 			out.format("<col/>%n");
 		}
 	}
@@ -378,12 +410,16 @@ public class ExcelToHtmlConverter {
 		endColumn = 0;
 		while (iter.hasNext()) {
 			Row row = iter.next();
+			if(row.getZeroHeight()) {
+				continue ;
+			}
 			short firstCell = row.getFirstCellNum();
 			if (firstCell >= 0) {
 				firstColumn = Math.min(firstColumn, firstCell);
 				endColumn = Math.max(endColumn, row.getLastCellNum());
 			}
 		}
+		
 		gotBounds = true;
 	}
 
@@ -408,7 +444,17 @@ public class ExcelToHtmlConverter {
 
 	private void printSheetContent(Sheet sheet) {
 		printColumnHeads();
-
+		List<CellRangeAddress> mergedRegions = sheet.getMergedRegions();
+		System.out.println("-----------------------------");
+		List<String> mergeAddress = new ArrayList<>();
+		mergedRegions.forEach(unit ->{
+			String address = unit.formatAsString();
+			System.out.println(address);
+			String tmp = address.substring(0, address.indexOf(":"));			
+			mergeAddress.add(tmp);
+		});
+		
+		System.out.println("-----------------------------");
 		out.format("<tbody>%n");
 		Iterator<Row> rows = sheet.rowIterator();
 		while (rows.hasNext()) {
@@ -417,12 +463,22 @@ public class ExcelToHtmlConverter {
 			out.format("  <tr>%n");
 			out.format("    <td class=\"%s\">%d</td>%n", ROW_HEAD_CLASS, row.getRowNum() + 1);
 			for (int i = firstColumn; i < endColumn; i++) {
+				if(sheet.isColumnHidden(i)) {
+					continue; 
+				}
 				String content = "&nbsp;";
 				String attrs = "";
 				CellStyle style = null;
 				if (i >= row.getFirstCellNum() && i < row.getLastCellNum()) {
 					Cell cell = row.getCell(i);
 					if (cell != null) {
+						 CellAddress address = cell.getAddress() ; 
+						 
+						if(mergeAddress.contains(address.formatAsString())) {
+							System.out.println(address.formatAsString());
+							
+						}
+						
 						style = cell.getCellStyle();
 						attrs = tagStyle(cell, style);
 						// Set the value that is rendered for the cell
